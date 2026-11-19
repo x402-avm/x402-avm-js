@@ -1,0 +1,42 @@
+# Release workflow: builds, tests, publishes to npm with provenance, and creates a GitHub Release.
+#
+# DISABLED by default: it only runs when started by hand (workflow_dispatch).
+# To enable it:
+#   1. Create an npm automation/granular access token that can publish `x402-avm-js` and add it
+#      as the repository secret NPM_TOKEN.
+#   2. Set the version in package.json and CHANGELOG.md, commit, and tag it (for example v0.4.0).
+#   3. Uncomment the `push: tags` trigger below, or start this workflow manually from the Actions tab.
+# Provenance needs the `id-token: write` permission and a public GitHub repository.
+name: Release
+
+on:
+  workflow_dispatch:
+  # push:
+  #   tags:
+  #     - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Create GitHub Release
+        run: gh release create "v$(node -p "require('./package.json').version")" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

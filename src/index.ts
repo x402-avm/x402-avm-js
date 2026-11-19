@@ -1,4 +1,25 @@
 import algosdk from 'algosdk';
+import {
+  InvalidOptionsError,
+  InvalidPaymentRequiredError,
+  NetworkMismatchError,
+  NoSupportedRequirementError,
+  PaymentNotAllowedError,
+  SpendLimitExceededError,
+  UnknownNetworkError,
+  X402AvmError,
+} from './errors.js';
+
+export {
+  InvalidOptionsError,
+  InvalidPaymentRequiredError,
+  NetworkMismatchError,
+  NoSupportedRequirementError,
+  PaymentNotAllowedError,
+  SpendLimitExceededError,
+  UnknownNetworkError,
+  X402AvmError,
+};
 
 /**
  * Payment requirements specified by an x402 server.
@@ -31,7 +52,7 @@ export interface PaymentRequirements {
     decimals?: number;
     genesisHash?: string;
     genesisId?: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
@@ -81,7 +102,7 @@ export interface PaymentRequired {
   error?: string | null;
   resource?: ResourceInfo | null;
   accepts: PaymentRequirements[];
-  extensions?: Record<string, any> | null;
+  extensions?: Record<string, unknown> | null;
 }
 
 /**
@@ -202,7 +223,7 @@ const ALIASES: Record<string, AlgorandNetwork> = {
  *
  * @param network - Network name alias or CAIP-2 string.
  * @returns Canonical CAIP-2 network string.
- * @throws {Error} If the network name or CAIP-2 string is unrecognized.
+ * @throws {UnknownNetworkError} If the network name or CAIP-2 string is unrecognized.
  *
  * @example
  * ```ts
@@ -216,7 +237,7 @@ export function resolveNetwork(network: string): string {
   if (/^algorand:[-_A-Za-z0-9]{1,32}$/.test(network)) return network;
   const legacyMatch = /^algorand:([A-Za-z0-9+/]{43}=)$/.exec(network);
   if (legacyMatch) return networkFromGenesisHash(legacyMatch[1]);
-  throw new Error(`Unknown network "${network}": use "mainnet", "testnet" or "algorand:<genesis hash>" (for LocalNet, networkFromAlgod(algod))`);
+  throw new UnknownNetworkError(`Unknown network "${network}": use "mainnet", "testnet" or "algorand:<genesis hash>" (for LocalNet, networkFromAlgod(algod))`, network);
 }
 
 /**
@@ -249,7 +270,7 @@ export function networkFromGenesisHash(genesisHash: Uint8Array | string): string
  *
  * @param algod - Algodv2 client instance.
  * @returns Promise resolving to the canonical CAIP-2 network identifier.
- * @throws {Error} If the algod node is unreachable or does not return a genesisHash.
+ * @throws {X402AvmError} If the algod node does not return a genesisHash (network errors from algod propagate unchanged).
  *
  * @example
  * ```ts
@@ -260,7 +281,8 @@ export function networkFromGenesisHash(genesisHash: Uint8Array | string): string
  */
 export async function networkFromAlgod(algod: algosdk.Algodv2): Promise<string> {
   const sp = await algod.getTransactionParams().do();
-  return networkFromGenesisHash(sp.genesisHash!);
+  if (!sp.genesisHash) throw new X402AvmError('algod did not return a genesis hash', 'no_genesis_hash');
+  return networkFromGenesisHash(sp.genesisHash);
 }
 
 /**
@@ -274,7 +296,7 @@ export async function networkFromAlgod(algod: algosdk.Algodv2): Promise<string> 
  * @param url - Optional custom algod base URL.
  * @param token - Optional authentication token or header.
  * @returns Configured Algodv2 client.
- * @throws {Error} If network has no default endpoint and url is omitted.
+ * @throws {UnknownNetworkError} If network has no default endpoint and url is omitted.
  *
  * @example
  * ```ts
@@ -287,7 +309,7 @@ export function algodClient(network: string, url?: string, token?: string): algo
     return new algosdk.Algodv2(token ?? LOCALNET_ENDPOINTS.algodToken, url ?? LOCALNET_ENDPOINTS.algodUrl, '');
   }
   const known = ALIASES[network] ?? ALIASES[network.toLowerCase()];
-  if (!known && !url) throw new Error(`No default endpoint for network "${network}": pass its algod URL`);
+  if (!known && !url) throw new UnknownNetworkError(`No default endpoint for network "${network}": pass its algod URL`, network);
   return new algosdk.Algodv2(token ?? '', url ?? known!.algodUrl, '');
 }
 
@@ -297,10 +319,11 @@ export function algodClient(network: string, url?: string, token?: string): algo
  * Searches the `accepts` array of a PaymentRequired challenge for an offer using the "exact"
  * payment scheme matching the specified network (resolved via `resolveNetwork`).
  *
- * @param paymentRequired - Parsed PaymentRequired object or object with `accepts` array.
+ * @param paymentRequired - Parsed PaymentRequired object (anything with an `accepts` array).
  * @param network - Desired network name, alias, or CAIP-2 identifier.
  * @returns The matching PaymentRequirements entry.
- * @throws {Error} If `accepts` is empty or no requirement matches the requested network.
+ * @throws {NoSupportedRequirementError} If `accepts` is empty.
+ * @throws {NetworkMismatchError} If no requirement matches the requested network.
  *
  * @example
  * ```ts
@@ -308,16 +331,20 @@ export function algodClient(network: string, url?: string, token?: string): algo
  * console.log(`Pay ${req.amount} microALGO to ${req.payTo}`);
  * ```
  */
-export function selectRequirement(paymentRequired: PaymentRequired | any, network: string): PaymentRequirements {
+export function selectRequirement(paymentRequired: Pick<PaymentRequired, 'accepts'>, network: string): PaymentRequirements {
   const accepts: PaymentRequirements[] = paymentRequired?.accepts ?? [];
   if (!accepts.length) {
-    throw new Error('No accepted payment requirements found in paymentRequired');
+    throw new NoSupportedRequirementError();
   }
   const want = resolveNetwork(network);
   const match = accepts.find((a) => a.scheme === 'exact' && safeResolve(a.network) === want);
   if (!match) {
     const offered = [...new Set(accepts.map((a) => a.network))].join(', ');
-    throw new Error(`The server asks for payment on ${offered}, but this wallet is on ${want}`);
+    throw new NetworkMismatchError(
+      `The server asks for payment on ${offered}, but this wallet is on ${want}`,
+      [...new Set(accepts.map((a) => a.network))],
+      want
+    );
   }
   return match;
 }
@@ -333,8 +360,8 @@ function safeResolve(n: string): string | null {
 // ---------------------------------------------------------------- payments
 
 function getNs(): string {
-  const p = (globalThis as any).process;
-  if (p && p.hrtime && typeof p.hrtime.bigint === 'function') {
+  const p = (globalThis as { process?: { hrtime?: { bigint?: () => bigint } } }).process;
+  if (p?.hrtime && typeof p.hrtime.bigint === 'function') {
     return p.hrtime.bigint().toString();
   }
   return `${Date.now()}000000`;
@@ -348,7 +375,7 @@ function getNs(): string {
  *
  * @param headerB64 - Base64-encoded string from the PAYMENT-REQUIRED response header.
  * @returns Decoded PaymentRequired object.
- * @throws {Error} If decoding or JSON parsing fails.
+ * @throws {InvalidPaymentRequiredError} If decoding or JSON parsing fails, or the decoded shape is invalid.
  *
  * @example
  * ```ts
@@ -358,7 +385,125 @@ function getNs(): string {
  * ```
  */
 export function decodePaymentRequired(headerB64: string): PaymentRequired {
-  return JSON.parse(new TextDecoder().decode(algosdk.base64ToBytes(headerB64.trim())));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(algosdk.base64ToBytes(headerB64.trim())));
+  } catch (cause) {
+    throw new InvalidPaymentRequiredError('PAYMENT-REQUIRED header is not base64-encoded JSON', { cause });
+  }
+  return parsePaymentRequired(parsed);
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Validate untrusted input (for example a decoded PAYMENT-REQUIRED header) and return it as a
+ * {@link PaymentRequired}. Every `accepts` entry must have string `scheme`, `network`, `asset`,
+ * `amount` (a non-negative integer), `payTo`, and a numeric `maxTimeoutSeconds`.
+ *
+ * @param value - Parsed JSON of unknown shape.
+ * @throws {InvalidPaymentRequiredError} If the shape is wrong.
+ */
+export function parsePaymentRequired(value: unknown): PaymentRequired {
+  if (!isRecord(value)) throw new InvalidPaymentRequiredError('PaymentRequired must be a JSON object');
+  if (typeof value.x402Version !== 'number') throw new InvalidPaymentRequiredError('PaymentRequired.x402Version must be a number');
+  if (!Array.isArray(value.accepts)) throw new InvalidPaymentRequiredError('PaymentRequired.accepts must be an array');
+  value.accepts.forEach((a: unknown, i: number) => {
+    if (!isRecord(a)) throw new InvalidPaymentRequiredError(`accepts[${i}] must be an object`);
+    for (const k of ['scheme', 'network', 'asset', 'amount', 'payTo'] as const) {
+      if (typeof a[k] !== 'string') throw new InvalidPaymentRequiredError(`accepts[${i}].${k} must be a string`);
+    }
+    if (!/^\d+$/.test(a.amount as string)) throw new InvalidPaymentRequiredError(`accepts[${i}].amount must be a non-negative integer string`);
+    if (!/^\d+$/.test(a.asset as string)) throw new InvalidPaymentRequiredError(`accepts[${i}].asset must be an asset id string ("0" for ALGO)`);
+    if (typeof a.maxTimeoutSeconds !== 'number') throw new InvalidPaymentRequiredError(`accepts[${i}].maxTimeoutSeconds must be a number`);
+    if (a.extra !== undefined && a.extra !== null && !isRecord(a.extra)) throw new InvalidPaymentRequiredError(`accepts[${i}].extra must be an object`);
+  });
+  return value as unknown as PaymentRequired;
+}
+
+// ---------------------------------------------------------------- spend controls
+
+/** Default per-payment cap in base units (1 ALGO, or 1 USDC) applied when `maxAmount` is not set. */
+export const DEFAULT_MAX_AMOUNT = 1_000_000n;
+
+/** A limit in base units: bigint, a non-negative safe integer, a decimal string, or `Infinity` for no cap. */
+export type AmountLimit = bigint | number | string;
+
+/**
+ * Client-side limits checked before anything is signed.
+ *
+ * The server chooses the amount in a 402 challenge, so a hostile or buggy server could ask for any amount.
+ * These controls bound what the client will agree to.
+ */
+export interface SpendControls {
+  /**
+   * Maximum amount per payment in base units. A single value applies to every asset; a record maps
+   * asset ids (`"0"` for ALGO) to limits, with `"*"` as the fallback for assets not listed. Anything
+   * not covered falls back to {@link DEFAULT_MAX_AMOUNT}. Pass `Infinity` to remove the cap.
+   */
+  maxAmount?: AmountLimit | Record<string, AmountLimit>;
+  /** If set, only these asset ids may be paid. */
+  allowedAssets?: Array<string | number | bigint>;
+  /** If set, only these networks (names or CAIP-2 ids) may be paid. */
+  allowedNetworks?: string[];
+  /** If set, only these recipient addresses may be paid. */
+  allowedPayTo?: string[];
+}
+
+function parseLimit(v: AmountLimit, what: string): bigint | null {
+  if (typeof v === 'bigint' && v >= 0n) return v;
+  if (typeof v === 'number') {
+    if (v === Infinity) return null;
+    if (Number.isSafeInteger(v) && v >= 0) return BigInt(v);
+  }
+  if (typeof v === 'string' && /^\d+$/.test(v)) return BigInt(v);
+  throw new InvalidOptionsError(`${what} must be a non-negative integer (bigint, number, or numeric string) or Infinity`);
+}
+
+function limitFor(maxAmount: SpendControls['maxAmount'], asset: string): bigint | null {
+  if (maxAmount === undefined) return DEFAULT_MAX_AMOUNT;
+  if (isRecord(maxAmount)) {
+    const v = maxAmount[asset] ?? maxAmount['*'];
+    return v === undefined ? DEFAULT_MAX_AMOUNT : parseLimit(v, `maxAmount[${asset}]`);
+  }
+  return parseLimit(maxAmount as AmountLimit, 'maxAmount');
+}
+
+function parseUint(v: string, what: string): bigint {
+  if (!/^\d+$/.test(v)) throw new InvalidPaymentRequiredError(`${what} must be a non-negative integer string, got "${v}"`);
+  const n = BigInt(v);
+  if (n > 0xffffffffffffffffn) throw new InvalidPaymentRequiredError(`${what} exceeds 64 bits`);
+  return n;
+}
+
+/**
+ * Check a requirement against spend controls. Throws before anything is built or signed.
+ *
+ * @throws {SpendLimitExceededError} If the amount is above the cap (default {@link DEFAULT_MAX_AMOUNT}).
+ * @throws {PaymentNotAllowedError} If the asset, network or recipient is not on an allow list.
+ * @throws {InvalidOptionsError} If a control is malformed.
+ * @throws {InvalidPaymentRequiredError} If the requirement's amount or asset is not an unsigned integer.
+ */
+export function checkSpendControls(req: PaymentRequirements, controls: SpendControls = {}): void {
+  const amount = parseUint(req.amount, 'amount');
+  const asset = parseUint(req.asset, 'asset').toString();
+
+  const limit = limitFor(controls.maxAmount, asset);
+  if (limit !== null && amount > limit) throw new SpendLimitExceededError(asset, amount, limit);
+
+  if (controls.allowedAssets && !controls.allowedAssets.some((a) => String(a) === asset)) {
+    throw new PaymentNotAllowedError('asset', asset);
+  }
+  if (controls.allowedNetworks) {
+    const net = safeResolve(req.network);
+    const ok = net !== null && controls.allowedNetworks.some((n) => safeResolve(n) === net);
+    if (!ok) throw new PaymentNotAllowedError('network', req.network);
+  }
+  if (controls.allowedPayTo && !controls.allowedPayTo.includes(req.payTo)) {
+    throw new PaymentNotAllowedError('payTo', req.payTo);
+  }
 }
 
 /**
@@ -379,7 +524,13 @@ export function decodePaymentRequired(headerB64: string): PaymentRequired {
  * @param req - Accepted payment requirement from the server.
  * @param payerAddress - Algorand address of the buyer/payer.
  * @param suggestedParams - Current suggested transaction parameters from algod.
+ * @param controls - Spend controls checked before anything is built. Without `maxAmount`, amounts above
+ *   {@link DEFAULT_MAX_AMOUNT} (1,000,000 base units) are refused.
  * @returns Object containing the transaction group, payment transaction index, and indexes requiring signature.
+ * @throws {SpendLimitExceededError} If the amount is above the cap.
+ * @throws {PaymentNotAllowedError} If the asset, network or recipient is not allowed.
+ * @throws {NetworkMismatchError} If `extra.genesisHash` or `extra.genesisId` disagrees with `suggestedParams`.
+ * @throws {InvalidPaymentRequiredError} If the amount, asset, payTo or feePayer is malformed.
  *
  * @example
  * ```ts
@@ -394,10 +545,37 @@ export function decodePaymentRequired(headerB64: string): PaymentRequired {
 export function buildExactAvmGroup(
   req: PaymentRequirements,
   payerAddress: string,
-  suggestedParams: algosdk.SuggestedParams
+  suggestedParams: algosdk.SuggestedParams,
+  controls: SpendControls = {}
 ): BuildGroupResult {
+  checkSpendControls(req, controls);
+
   const extra = req.extra || {};
   const feePayer = extra.feePayer;
+
+  if (!algosdk.isValidAddress(req.payTo)) {
+    throw new InvalidPaymentRequiredError(`payTo "${req.payTo}" is not a valid Algorand address`);
+  }
+  if (feePayer !== undefined && (typeof feePayer !== 'string' || !algosdk.isValidAddress(feePayer))) {
+    throw new InvalidPaymentRequiredError('extra.feePayer is not a valid Algorand address');
+  }
+  if (typeof extra.genesisHash === 'string' && suggestedParams.genesisHash) {
+    const have = algosdk.bytesToBase64(suggestedParams.genesisHash);
+    if (extra.genesisHash !== have) {
+      throw new NetworkMismatchError(
+        `The requirement is for genesis ${extra.genesisHash}, but this algod is on ${have}`,
+        [extra.genesisHash],
+        have
+      );
+    }
+  }
+  if (typeof extra.genesisId === 'string' && suggestedParams.genesisID && extra.genesisId !== suggestedParams.genesisID) {
+    throw new NetworkMismatchError(
+      `The requirement is for ${extra.genesisId}, but this algod is on ${suggestedParams.genesisID}`,
+      [extra.genesisId],
+      suggestedParams.genesisID
+    );
+  }
 
   const transactions: algosdk.Transaction[] = [];
   let paymentIndex: number;
@@ -429,8 +607,8 @@ export function buildExactAvmGroup(
     signIndexes = [0];
   }
 
-  const assetId = Number(req.asset);
-  const amount = BigInt(req.amount);
+  const assetId = Number(parseUint(req.asset, 'asset'));
+  const amount = parseUint(req.amount, 'amount');
 
   const payerSp: algosdk.SuggestedParams = {
     ...suggestedParams,
@@ -490,12 +668,12 @@ export function buildExactAvmGroup(
  * ```
  */
 export function encodePaymentHeader(
-  paymentRequired: PaymentRequired | any,
+  paymentRequired: PaymentRequired,
   accepted: PaymentRequirements,
   groupB64: string[],
   paymentIndex: number
 ): string {
-  const payloadObj: Record<string, any> = {
+  const payloadObj: Record<string, unknown> = {
     x402Version: 2,
     accepted,
     payload: {
@@ -528,8 +706,14 @@ export function encodePaymentHeader(
  * @param payerAddress - Algorand address of the paying account.
  * @param algod - Algodv2 client instance for the active network.
  * @param signTxns - Callback function that signs unsigned transaction byte arrays for specified indexes.
+ * @param controls - Spend controls. By default a payment above 1,000,000 base units is refused before
+ *   `signTxns` is called; raise it with `maxAmount`. See {@link SpendControls}.
  * @returns Promise resolving to the base64-encoded `PAYMENT-SIGNATURE` header string.
- * @throws {Error} If parameter fetching fails, requirement matching fails, or signing is rejected.
+ * @throws {NoSupportedRequirementError} If `accepts` is empty.
+ * @throws {NetworkMismatchError} If no offer is for the algod's network.
+ * @throws {SpendLimitExceededError} If the amount is above the cap.
+ * @throws {PaymentNotAllowedError} If the asset, network or recipient is not allowed.
+ * Errors from algod or from `signTxns` propagate unchanged.
  *
  * @example
  * ```ts
@@ -544,16 +728,17 @@ export function encodePaymentHeader(
  * ```
  */
 export async function payForRequirement(
-  paymentRequired: PaymentRequired | any,
+  paymentRequired: PaymentRequired,
   payerAddress: string,
   algod: algosdk.Algodv2,
-  signTxns: (txns: Uint8Array[], indexes: number[]) => Promise<(Uint8Array | null)[]>
+  signTxns: (txns: Uint8Array[], indexes: number[]) => Promise<(Uint8Array | null)[]>,
+  controls: SpendControls = {}
 ): Promise<string> {
   const sp = await algod.getTransactionParams().do();
   // Pay only an offer for the network this algod is on: a payment signed for another network is useless,
   // and choosing by network lets one server offer several (e.g. MainNet USDC and TestNet ALGO).
   const accepted = selectRequirement(paymentRequired, networkFromGenesisHash(sp.genesisHash));
-  const { txns, paymentIndex, signIndexes } = buildExactAvmGroup(accepted, payerAddress, sp);
+  const { txns, paymentIndex, signIndexes } = buildExactAvmGroup(accepted, payerAddress, sp, controls);
 
   const unsignedBytesList = txns.map((t) => algosdk.encodeUnsignedTransaction(t));
   const signedResults = await signTxns(unsignedBytesList, signIndexes);

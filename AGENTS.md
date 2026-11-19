@@ -15,7 +15,7 @@ Guidance for AI coding agents and human contributors working on `x402-avm-js`.
 
 ## Environment Setup
 
-Requires Node.js >= 18:
+Requires Node.js >= 20:
 
 ```bash
 npm ci
@@ -28,8 +28,8 @@ Tests are organized into three distinct tiers:
 ```bash
 # 1. Offline unit tests (fast, no network or LocalNet required):
 npm test
-# Or specifically:
-npx vitest run tests/unit.test.ts
+# With coverage thresholds (what CI runs):
+npm run test:coverage
 
 # 2. LocalNet integration tests (requires AlgoKit LocalNet running on localhost:4001/4002):
 LOCALNET=1 npx vitest run tests/golden.test.ts tests/golden_asa.test.ts
@@ -59,19 +59,19 @@ npm run build
 ├── .github/
 │   ├── dependabot.yml          # Weekly dependency update schedule (npm, actions)
 │   └── workflows/
-│       └── ci.yml              # GitHub Actions CI matrix and test workflow
+│       ├── ci.yml              # GitHub Actions CI matrix and test workflow
+│       └── release.yml         # npm publish with provenance (manual trigger only until enabled)
 ├── src/                        # Library source code
-│   ├── index.ts                # Main entry point and exports
-│   ├── networks.ts             # CAIP-2 network resolvers and network constants
-│   ├── payment.ts              # Payment parsing, transaction group construction, encoding
-│   ├── identity.ts             # Off-chain Ed25519 identity transaction builder
-│   └── types.ts                # TypeScript type definitions for x402 V2 structures
+│   ├── index.ts                # Networks, payment parsing/building/encoding, spend controls, identity txn
+│   └── errors.ts               # Typed errors (X402AvmError and subclasses)
 ├── tests/                      # Vitest test suite
 │   ├── fixtures/
 │   │   ├── make_402.py         # Dynamic 402 fixture generator for tests
 │   │   └── payment_required.b64 # Static offline sample fixture for unit tests
 │   ├── helpers.ts              # LocalNet KMD dispenser, account funding, and ASA helpers
 │   ├── unit.test.ts            # Offline unit tests
+│   ├── core.test.ts            # Offline: decode/validate, selection, CAIP-2, group construction
+│   ├── spend_controls.test.ts  # Offline: spend controls and typed errors
 │   ├── golden.test.ts          # Live LocalNet ALGO payment verification and settlement
 │   ├── golden_asa.test.ts      # Live LocalNet ASA (mUSD) payment and negative test cases
 │   ├── networks.test.ts        # CAIP-2 resolution and public network simulations
@@ -95,8 +95,9 @@ npm run build
    - LocalNet: `algorand:<genesis-hash>` (derived from algod `suggestedParams().genesisHash`)
    Accept legacy 44-character base64 IDs and normalize them via `resolveNetwork()`.
 4. **Units and Currencies**: Amounts are always expressed in base integer units (microALGO or base ASA units) as strings in payment headers and `bigint` in internal calculations.
-5. **No Secrets**: Never commit private keys, mnemonics, or production tokens.
-6. **Integrity of Assertions**: Never weaken tests or reduce assertion checks to make a suite pass. Preserve exact balance checks.
+5. **Spend controls**: every path that signs must go through `checkSpendControls`; the default cap is 1,000,000 base units. Do not remove it.
+6. **No Secrets**: Never commit private keys, mnemonics, or production tokens.
+7. **Integrity of Assertions**: Never weaken tests or reduce assertion checks to make a suite pass. Preserve exact balance checks.
 
 ## Pull Request Checklist
 
@@ -107,4 +108,5 @@ Before opening a pull request, ensure:
 - [ ] `LOCALNET=1 npx vitest run tests/golden.test.ts tests/golden_asa.test.ts` passes against LocalNet.
 - [ ] `npm run build` cleanly produces `dist/`.
 - [ ] Grep audit for private local paths and usernames returns nothing.
+- [ ] `npm run test:coverage` meets the thresholds in `vitest.config.ts`.
 - [ ] `CHANGELOG.md` is updated with your changes.

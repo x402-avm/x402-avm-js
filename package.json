@@ -1,9 +1,9 @@
 {
   "name": "x402-avm-js",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "x402 payments on Algorand (AVM) for browsers and Node: build, sign and encode exact-scheme payments on MainNet, TestNet and LocalNet.",
   "license": "MIT",
-  "author": "AI Economy Team",
+  "author": "x402-avm contributors (https://github.com/x402-avm)",
   "homepage": "https://x402-avm.github.io",
   "repository": {
     "type": "git",
@@ -25,12 +25,13 @@
   },
   "files": [
     "dist",
+    "src",
     "README.md",
     "LICENSE"
   ],
   "sideEffects": false,
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "keywords": [
     "x402",
@@ -47,13 +48,15 @@
     "build": "tsc",
     "lint": "tsc --noEmit",
     "test": "vitest run",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run build && npm test",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "algosdk": "^3.9.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "@vitest/coverage-v8": "^3.2.7",
     "typescript": "^7.0.2",
     "vitest": "^3.0.0"
   }

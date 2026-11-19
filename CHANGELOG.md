@@ -5,6 +5,29 @@ All notable changes to `x402-avm-js` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-19
+
+### Breaking
+- **Default spend cap.** `payForRequirement` and `buildExactAvmGroup` now refuse any payment above 1,000,000 base units (1 ALGO, or 1 USDC) with a `SpendLimitExceededError`, before anything is signed. This matches the Python x402 client default. To pay more, pass the new options argument, for example `payForRequirement(challenge, address, algod, signer, { maxAmount: 5_000_000n })`; `maxAmount: Infinity` removes the cap.
+- Node.js 18 is no longer supported; the package requires Node.js >= 20 and CI tests 20, 22 and 24.
+- Types: `extra` and `extensions` values are now `unknown` instead of `any`, and `selectRequirement`, `encodePaymentHeader` and `payForRequirement` take `PaymentRequired` instead of `PaymentRequired | any`. Use `decodePaymentRequired` or `parsePaymentRequired` to turn untrusted JSON into a `PaymentRequired`.
+- `decodePaymentRequired` now validates the decoded shape and throws `InvalidPaymentRequiredError` (previously it returned whatever JSON it found).
+
+### Added
+- Spend controls: `maxAmount` (per payment, or per asset), `allowedAssets`, `allowedNetworks`, `allowedPayTo`; exported `SpendControls`, `DEFAULT_MAX_AMOUNT`, `checkSpendControls`.
+- Typed errors, all extending `X402AvmError` with a stable `code`: `SpendLimitExceededError`, `PaymentNotAllowedError`, `InvalidPaymentRequiredError`, `NoSupportedRequirementError`, `NetworkMismatchError`, `UnknownNetworkError`, `InvalidOptionsError`.
+- `parsePaymentRequired(value: unknown)` for validating untrusted input.
+- `buildExactAvmGroup` rejects requirements whose `extra.genesisHash` or `extra.genesisId` disagrees with the algod parameters, and malformed `payTo`, `feePayer`, `amount` and `asset` values.
+- Offline test suite grown from 8 to 49 tests, with a coverage report and thresholds in CI.
+- Release workflow (`release.yml`), disabled until an `NPM_TOKEN` secret is configured; publishes with npm provenance.
+
+### Changed
+- `src/` is now published in the package so source maps and go-to-definition resolve.
+- Author is "x402-avm contributors"; the LICENSE copyright line is updated to match.
+
+### Security
+- Client-side spend limits (see Breaking) protect against a server requesting an unexpectedly large amount.
+
 ## [0.3.1] - 2026-11-19
 
 ### Added

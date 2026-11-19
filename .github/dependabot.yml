@@ -12,7 +12,7 @@ updates:
           - "minor"
           - "patch"
     ignore:
-      # vitest >= 4 requires Node >= 20.0.0 and vitest >= 5 requires Node >= 22.12.0; x402-avm-js supports Node >= 18 at runtime and tests Node 18/20/22 in CI
+      # vitest >= 4 requires Node >= 20.0.0 and vitest >= 5 requires Node >= 22.12.0; x402-avm-js supports Node >= 20 and tests Node 20/22/24 in CI; keep vitest on 3.x
       - dependency-name: "vitest"
         update-types:
           - "version-update:semver-major"
