@@ -316,7 +316,10 @@ describeLocalNet('GOLDEN ASA Cross-Language Tests (LOCALNET=1)', () => {
 
       const pyResult = runPyVerify(header, vendorBAccount.mnemonic);
       expect(pyResult.verify).toBe(false);
-      expect(pyResult.reason).toBe('invalid_exact_avm_payload_invalid_signature');
+      // algosdk records client2 as the authorizing address (sgnr) when it signs for client1.
+      // x402-algorand >= 0.3.0 accepts rekeyed senders per the exact-AVM spec, so the
+      // signature check passes and on-chain simulation rejects the group instead.
+      expect(pyResult.reason).toBe('transaction_simulation_failed');
       expect(pyResult.settled_txid).toBeNull();
 
       const c1After = await algod.accountInformation(client1Addr).do();

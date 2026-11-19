@@ -5,6 +5,11 @@ All notable changes to `x402-avm-js` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-11-19
+
+### Fixed
+- `algodClient('localnet')` connected to port 80 instead of 4001: the empty-string port passed to `algosdk.Algodv2` made algosdk 3.x override the port in the URL. The port is now omitted so the URL's own port (or the scheme default for MainNet and TestNet) is used. Affected every release since the first.
+
 ## [0.4.0] - 2026-11-19
 
 ### Breaking

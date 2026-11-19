@@ -161,3 +161,36 @@ live.each([
     }
   }
 });
+
+describe('algodClient port handling', () => {
+  const baseUrl = (c: algosdk.Algodv2): URL => new URL((c as any).c.bc.baseURL.toString());
+
+  it('localnet targets port 4001 (not 80)', () => {
+    const u = baseUrl(algodClient('localnet'));
+    expect(u.hostname).toBe('localhost');
+    expect(u.port).toBe('4001');
+  });
+
+  it('custom localnet URL keeps its own port', () => {
+    expect(baseUrl(algodClient('localnet', 'http://127.0.0.1:5555')).port).toBe('5555');
+  });
+
+  it('testnet and mainnet keep the default https port', () => {
+    for (const n of ['testnet', 'mainnet']) {
+      const u = baseUrl(algodClient(n));
+      expect(u.protocol).toBe('https:');
+      expect(u.port).toBe('');
+    }
+  });
+
+  it('a custom URL with a port keeps that port', () => {
+    expect(baseUrl(algodClient('private-net', 'http://10.0.0.5:4001')).port).toBe('4001');
+  });
+});
+
+describe.skipIf(process.env.LOCALNET !== '1')('algodClient against LocalNet (LOCALNET=1)', () => {
+  it('status() reaches the node on localhost:4001', async () => {
+    const status = await algodClient('localnet').status().do();
+    expect(status.lastRound).toBeGreaterThan(0n);
+  });
+});

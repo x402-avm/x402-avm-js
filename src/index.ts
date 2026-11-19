@@ -276,7 +276,7 @@ export function networkFromGenesisHash(genesisHash: Uint8Array | string): string
  * ```ts
  * const algod = algodClient('localnet');
  * const networkId = await networkFromAlgod(algod);
- * console.log(networkId); // 'algorand:...'
+ * console.log(networkId); // 'algorand:' followed by the genesis hash, e.g. TestNet's CAIP-2 id
  * ```
  */
 export async function networkFromAlgod(algod: algosdk.Algodv2): Promise<string> {
@@ -300,17 +300,19 @@ export async function networkFromAlgod(algod: algosdk.Algodv2): Promise<string> 
  *
  * @example
  * ```ts
- * const client = algodClient('testnet');
- * const localClient = algodClient('localnet');
+ * const client = algodClient('testnet'); // https://testnet-api.algonode.cloud
+ * const localClient = algodClient('localnet'); // http://localhost:4001
+ * const status = await localClient.status().do();
+ * const privateNode = algodClient('my-private-net', 'http://10.0.0.5:4001', 'my-token');
  * ```
  */
 export function algodClient(network: string, url?: string, token?: string): algosdk.Algodv2 {
   if (network.toLowerCase() === 'localnet') {
-    return new algosdk.Algodv2(token ?? LOCALNET_ENDPOINTS.algodToken, url ?? LOCALNET_ENDPOINTS.algodUrl, '');
+    return new algosdk.Algodv2(token ?? LOCALNET_ENDPOINTS.algodToken, url ?? LOCALNET_ENDPOINTS.algodUrl, undefined);
   }
   const known = ALIASES[network] ?? ALIASES[network.toLowerCase()];
   if (!known && !url) throw new UnknownNetworkError(`No default endpoint for network "${network}": pass its algod URL`, network);
-  return new algosdk.Algodv2(token ?? '', url ?? known!.algodUrl, '');
+  return new algosdk.Algodv2(token ?? '', url ?? known!.algodUrl, undefined);
 }
 
 /**
