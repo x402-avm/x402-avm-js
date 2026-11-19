@@ -5,6 +5,18 @@ All notable changes to `x402-avm-js` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-11-19
+
+### Added
+- Repository and package metadata: repository, homepage, bugs URL, keywords, and author.
+- Self-contained LocalNet golden test suite with dynamic KMD dispenser funding and dynamic ASA lifecycle testing.
+- Documentation and repository standards: README.md, AGENTS.md, .gitignore, and .editorconfig.
+- Dependabot configuration grouping minor/patch updates and pinning vitest to 3.x for Node 18/20 runtime compatibility.
+
+### Changed
+- Updated devDependencies: upgraded TypeScript to 7.0.2.
+- Hardened timestamp generator `getNs()` to safely access `globalThis.process` across browser, edge, and Node.js environments.
+
 ## [0.3.0] - 2026-11-18
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "name": "x402-avm-js",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "x402 payments on Algorand (AVM) for browsers and Node: build, sign and encode exact-scheme payments on MainNet, TestNet and LocalNet.",
   "license": "MIT",
   "author": "AI Economy Team",
@@ -54,7 +54,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
-    "typescript": "^5.8.0",
+    "typescript": "^7.0.2",
     "vitest": "^3.0.0"
   }
 }

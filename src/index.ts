@@ -333,8 +333,9 @@ function safeResolve(n: string): string | null {
 // ---------------------------------------------------------------- payments
 
 function getNs(): string {
-  if (typeof process !== 'undefined' && process.hrtime && typeof process.hrtime.bigint === 'function') {
-    return process.hrtime.bigint().toString();
+  const p = (globalThis as any).process;
+  if (p && p.hrtime && typeof p.hrtime.bigint === 'function') {
+    return p.hrtime.bigint().toString();
   }
   return `${Date.now()}000000`;
 }
